@@ -1,0 +1,22 @@
+# github.com/alecthomas/kingpin/v2 v2.4.0
+## explicit; go 1.17
+github.com/alecthomas/kingpin/v2
+# github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137
+## explicit; go 1.15
+github.com/alecthomas/units
+# github.com/gabriel-vasile/mimetype v1.4.4
+## explicit; go 1.20
+# github.com/xhit/go-str2duration/v2 v2.1.0
+## explicit; go 1.13
+github.com/xhit/go-str2duration/v2
+# go.etcd.io/bbolt v1.3.10
+## explicit; go 1.21
+go.etcd.io/bbolt
+# golang.org/x/net v0.25.0
+## explicit; go 1.18
+# golang.org/x/oauth2 v0.21.0
+## explicit; go 1.18
+# golang.org/x/sys v0.20.0
+## explicit; go 1.18
+golang.org/x/sys/unix
+golang.org/x/sys/windows
