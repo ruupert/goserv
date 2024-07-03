@@ -1,4 +1,4 @@
-module github.com/ruupert/gotesting
+module github.com/ruupert/goserv
 
 go 1.22.1
 

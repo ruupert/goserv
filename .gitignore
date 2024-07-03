@@ -1,0 +1,5 @@
+bolt.db
+*.pem
+*.crt
+*.key
+goserv
