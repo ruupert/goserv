@@ -121,6 +121,9 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
+	"net/http"
+	"time"
 )
 
 var TLSConfig = &tls.Config{
@@ -132,5 +135,19 @@ var TLSConfig = &tls.Config{
 		tls.{{ printf "%s" . }},
 {{- end }}
 	},
+}
+
+
+func getTLSSrv(addr string, port string, cfg *tls.Config, mux *http.ServeMux) *http.Server {
+	return &http.Server{
+		Addr:              fmt.Sprintf("%s:%s", addr, port),
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      5 * time.Second,
+		MaxHeaderBytes:    8192,
+		TLSConfig:         cfg,
+		TLSNextProto:      make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+	}
 }
 `))

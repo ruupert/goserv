@@ -3,7 +3,6 @@ package main
 //go:generate go run generators/tls.go
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io/fs"
 	"log"
@@ -45,7 +44,8 @@ type Bolton struct {
 var singleton *Bolton
 
 var (
-	goServPort   = kingpin.Flag("port", "port").Default(":8100").String()
+	goServPort   = kingpin.Flag("port", "port").Default("8100").String()
+	goServAddr   = kingpin.Flag("addr", "addr").Default("0.0.0.0").String()
 	goServDir    = kingpin.Flag("dir", "dir").Default(".").String()
 	goServTlsCrt = kingpin.Flag("crt", "crtfile").Default("tls.crt").String()
 	goServTlsKey = kingpin.Flag("key", "keyfile").Default("tls.key").String()
@@ -116,6 +116,17 @@ func init() {
 
 func GetBoltInstance() *Bolton {
 	return singleton
+}
+
+func filterRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+		if r.Method == "GET" {
+			next.ServeHTTP(w, r)
+		} else {
+			http.Error(w, "Invalid request", http.StatusMethodNotAllowed)
+		}
+	})
 }
 
 func serveStatic(next http.Handler) http.Handler {
@@ -222,15 +233,9 @@ func main() {
 	kingpin.Parse()
 	mux := http.NewServeMux()
 	finalHandler := http.HandlerFunc(handlePath)
-	mux.Handle("/", http.StripPrefix("/", serveStatic(logRequests(finalHandler))))
+	mux.Handle("/", http.StripPrefix("/", filterRequests(serveStatic(logRequests(finalHandler)))))
 
-	cfg := TLSConfig
-	srv := &http.Server{
-		Addr:         *goServPort,
-		Handler:      mux,
-		TLSConfig:    cfg,
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
-	}
+	srv := getTLSSrv(*goServAddr, *goServPort, TLSConfig, mux)
 	fmt.Printf("Listening on %s\n", *goServPort)
 	log.Fatal(srv.ListenAndServeTLS(*goServTlsCrt, *goServTlsKey))
 }
