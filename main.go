@@ -1,5 +1,7 @@
 package main
 
+//go:generate go run generators/tls.go
+
 import (
 	"crypto/tls"
 	"fmt"
@@ -143,6 +145,7 @@ func handlePath(w http.ResponseWriter, r *http.Request) {
 	fh, err := os.Stat(name)
 	if err != nil {
 		fmt.Printf("File %s error: %s ", name, err)
+		return
 	}
 	if !fh.IsDir() {
 		serveFile(w, r, name)
@@ -193,7 +196,7 @@ func getDate(upath string, name string) string {
 	bolton := GetBoltInstance()
 	var path []byte
 	if upath == "." {
-		path = bolton.get(upath)
+		path = bolton.get(name)
 	} else {
 		path = bolton.get(upath + "/" + name)
 	}
@@ -221,17 +224,7 @@ func main() {
 	finalHandler := http.HandlerFunc(handlePath)
 	mux.Handle("/", http.StripPrefix("/", serveStatic(logRequests(finalHandler))))
 
-	cfg := &tls.Config{
-		MinVersion:               tls.VersionTLS12,
-		CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
-		PreferServerCipherSuites: true,
-		CipherSuites: []uint16{
-			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-			tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-		},
-	}
+	cfg := TLSConfig
 	srv := &http.Server{
 		Addr:         *goServPort,
 		Handler:      mux,
