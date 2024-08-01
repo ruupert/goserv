@@ -4,6 +4,7 @@ package main
 
 import (
 	"embed"
+	"flag"
 	"fmt"
 	"io/fs"
 	"log"
@@ -12,11 +13,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"text/template"
 	"time"
 	"unicode/utf8"
 
-	"github.com/alecthomas/kingpin/v2"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -49,16 +50,30 @@ var embedded embed.FS
 var singleton *Bolton
 
 var (
-	goServPort   = kingpin.Flag("port", "port").Default("8100").String()
-	goServAddr   = kingpin.Flag("addr", "addr").Default("0.0.0.0").String()
-	goServDir    = kingpin.Flag("dir", "dir").Default(".").String()
-	goServTlsCrt = kingpin.Flag("crt", "crtfile").Default("tls.crt").String()
-	goServTlsKey = kingpin.Flag("key", "keyfile").Default("tls.key").String()
+	goServPort   string
+	goServAddr   string
+	goServDir    string
+	goServTlsCrt string
+	goServTlsKey string
+	goServBoltDB string
 )
 
 func init() {
+
+	flag.StringVar(&goServPort, "port", "8100", "port to bind")
+	flag.StringVar(&goServAddr, "addr", "0.0.0.0", "addr to use")
+	flag.StringVar(&goServDir, "dir", ".", "dir to serve")
+	flag.StringVar(&goServTlsCrt, "crt", "tls.crt", "crtfile")
+	flag.StringVar(&goServTlsKey, "key", "tls.key", "keyfile")
+	flag.StringVar(&goServBoltDB, "db", "bolt.db", "db file")
+	if !strings.HasSuffix(os.Args[0], ".test") {
+		flag.Parse()
+	} else {
+		goServBoltDB = "testdata/bolt.db"
+	}
+
 	fmt.Println("Initializing")
-	mbdb, err := bolt.Open("bolt.db", 0600, nil)
+	mbdb, err := bolt.Open(goServBoltDB, 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -161,7 +176,7 @@ func logRequests(next http.Handler) http.Handler {
 
 func handlePath(w http.ResponseWriter, r *http.Request) {
 	upath := path.Clean(r.URL.Path)
-	name := filepath.Join(*goServDir, upath)
+	name := filepath.Join(goServDir, upath)
 	fh, err := os.Stat(name)
 	if err != nil {
 		fmt.Printf("File %s error: %s ", name, err)
@@ -238,12 +253,11 @@ func serveFile(w http.ResponseWriter, r *http.Request, name string) {
 
 func main() {
 
-	kingpin.Parse()
 	mux := http.NewServeMux()
 	finalHandler := http.HandlerFunc(handlePath)
 	mux.Handle("/", http.StripPrefix("/", filterRequests(serveStatic(logRequests(finalHandler)))))
 
-	srv := getTLSSrv(*goServAddr, *goServPort, TLSConfig, mux)
-	fmt.Printf("Listening on %s\n", *goServPort)
-	log.Fatal(srv.ListenAndServeTLS(*goServTlsCrt, *goServTlsKey))
+	srv := getTLSSrv(goServAddr, goServPort, TLSConfig, mux)
+	fmt.Printf("Listening on %s\n", goServPort)
+	log.Fatal(srv.ListenAndServeTLS(goServTlsCrt, goServTlsKey))
 }
