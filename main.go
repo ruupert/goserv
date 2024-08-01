@@ -3,6 +3,7 @@ package main
 //go:generate go run generators/tls.go
 
 import (
+	"embed"
 	"fmt"
 	"io/fs"
 	"log"
@@ -41,6 +42,10 @@ type Bolton struct {
 	dump   boltDumpType
 }
 
+//go:embed assets/css/style.css
+//go:embed assets/templates/layout.html
+var embedded embed.FS
+
 var singleton *Bolton
 
 var (
@@ -57,13 +62,16 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mbdb.Update(func(tx *bolt.Tx) error {
+	err = mbdb.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("MyBucket"))
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
 		return nil
 	})
+	if err != nil {
+		fmt.Println(err)
+	}
 	singleton = &Bolton{
 		bdb: mbdb,
 		update: func(uri string) error {
@@ -77,22 +85,20 @@ func init() {
 				fmt.Println(berr)
 				return berr
 			}
-			//fmt.Printf("Allocated ID %s\n", uri)
 			return nil
 		},
 		get: func(uri string) []byte {
 			bolton := GetBoltInstance()
 			var res []byte
-			//fmt.Println(uri)
-			bolton.bdb.View(func(tx *bolt.Tx) error {
+			err := bolton.bdb.View(func(tx *bolt.Tx) error {
 				b := tx.Bucket([]byte("MyBucket"))
 				v := b.Get([]byte(uri))
 				res = v
-				if len(v) > 0 {
-					//fmt.Printf("Accessed: %s\n", v)
-				}
 				return nil
 			})
+			if err != nil {
+				fmt.Println(err)
+			}
 			if len(res) > 0 {
 				return res
 			} else {
@@ -133,7 +139,7 @@ func serveStatic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "css" {
 			w.Header().Set("Cache-Control", "no-cache")
-			http.ServeFile(w, r, "css/style.css")
+			http.ServeFileFS(w, r, embedded, "assets/css/style.css")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -145,7 +151,10 @@ func logRequests(next http.Handler) http.Handler {
 		bolton := GetBoltInstance()
 		upath := path.Clean(r.URL.Path)
 		//fmt.Println("Upath is: " + upath)
-		bolton.update(upath)
+		err := bolton.update(upath)
+		if err != nil {
+			fmt.Println(err)
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -162,17 +171,16 @@ func handlePath(w http.ResponseWriter, r *http.Request) {
 		serveFile(w, r, name)
 		return
 	}
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
 	w.Header().Set("Cache-Control", "no-cache")
-	tmpl := template.Must(template.ParseFiles(wd + "/templates/layout.html"))
+	tmpl := template.Must(template.ParseFS(embedded, "assets/templates/layout.html"))
 	pagedata := LinkPageData{
 		PageTitle: "test",
 		Links:     populateLinks(name, upath),
 	}
-	tmpl.Execute(w, pagedata)
+	err = tmpl.Execute(w, pagedata)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func populateLinks(name string, upath string) []Link {

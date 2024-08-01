@@ -3,5 +3,5 @@ bolt.db
 *.crt
 *.key
 goserv
-
+tmp/
 dist/
