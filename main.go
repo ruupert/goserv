@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -24,7 +25,8 @@ import (
 type Link struct {
 	Name string
 	Href string
-	Date string
+	Date int64
+	Tick string
 }
 
 type LinkPageData struct {
@@ -207,10 +209,18 @@ func populateLinks(name string, upath string) []Link {
 	for _, file := range files {
 		var link Link
 		link.Name = file.Name()
-		link.Date = getDate(upath, file.Name())
+		finfo, err := file.Info()
+		if err != nil {
+			fmt.Println(err)
+		}
+		link.Date = finfo.ModTime().Unix()
 		link.Href = getHref(file, upath)
+		link.Tick = getTick(upath, file.Name())
 		links = append(links, link)
 	}
+	sort.Slice(links, func(i, j int) bool {
+		return links[i].Date >= links[j].Date
+	})
 	return links
 }
 
@@ -224,8 +234,7 @@ func getHref(file fs.DirEntry, upath string) string {
 	return res
 }
 
-// does not get the date but instead returns a tick char for watched
-func getDate(upath string, name string) string {
+func getTick(upath string, name string) string {
 	var res string
 	bolton := GetBoltInstance()
 	var path []byte
@@ -238,7 +247,6 @@ func getDate(upath string, name string) string {
 	if terr != nil {
 		res = ""
 	} else {
-		// res = dtime.Format(time.RFC3339)
 		src := "\u2713\u2715"
 		r, _ := utf8.DecodeRuneInString(src)
 		res = string(r)
