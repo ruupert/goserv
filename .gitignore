@@ -2,6 +2,8 @@ bolt.db
 *.pem
 *.crt
 *.key
+.scannerwork
 goserv
 tmp/
 dist/
+tls.go

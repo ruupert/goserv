@@ -218,9 +218,15 @@ func populateLinks(name string, upath string) []Link {
 		link.Tick = getTick(upath, file.Name())
 		links = append(links, link)
 	}
-	sort.Slice(links, func(i, j int) bool {
-		return links[i].Date >= links[j].Date
-	})
+	if upath == "/" {
+		sort.Slice(links, func(i, j int) bool {
+			return links[i].Date >= links[j].Date
+		})
+	} else {
+		sort.Slice(links, func(i, j int) bool {
+			return links[i].Name <= links[j].Name
+		})
+	}
 	return links
 }
 
