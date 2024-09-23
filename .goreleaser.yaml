@@ -36,7 +36,7 @@ sboms:
     artifacts: source
 
 archives:
-  - format: tar.gz
+  - format: gz
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
