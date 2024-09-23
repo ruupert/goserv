@@ -7,3 +7,4 @@ goserv
 tmp/
 dist/
 tls.go
+.vscode

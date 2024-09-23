@@ -37,6 +37,25 @@ type LinkPageData struct {
 type boltUpdateType func(uri string) error
 type boltGetType func(uri string) []byte
 type boltDumpType func(uri string) error
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return fmt.Sprintf("%v", *i)
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
+func (i *arrayFlags) Contains(value string) bool {
+	for _, item := range *i {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
 
 type Bolton struct {
 	bdb    *bolt.DB
@@ -52,12 +71,13 @@ var embedded embed.FS
 var singleton *Bolton
 
 var (
-	goServPort   string
-	goServAddr   string
-	goServDir    string
-	goServTlsCrt string
-	goServTlsKey string
-	goServBoltDB string
+	goServPort    string
+	goServAddr    string
+	goServDir     string
+	goServTlsCrt  string
+	goServTlsKey  string
+	goServBoltDB  string
+	goIgnoreFiles arrayFlags
 )
 
 func init() {
@@ -68,6 +88,7 @@ func init() {
 	flag.StringVar(&goServTlsCrt, "crt", "tls.crt", "crtfile")
 	flag.StringVar(&goServTlsKey, "key", "tls.key", "keyfile")
 	flag.StringVar(&goServBoltDB, "db", "bolt.db", "db file")
+	flag.Var(&goIgnoreFiles, "ignore", "repeatable, -ignore fname1 -ignore fname2")
 	if !strings.HasSuffix(os.Args[0], ".test") {
 		flag.Parse()
 	} else {
@@ -185,7 +206,10 @@ func handlePath(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !fh.IsDir() {
-		serveFile(w, r, name)
+		// terrible but works
+		if !goIgnoreFiles.Contains(name) {
+			serveFile(w, r, name)
+		}
 		return
 	}
 	w.Header().Set("Cache-Control", "no-cache")
@@ -207,16 +231,18 @@ func populateLinks(name string, upath string) []Link {
 	}
 	var links []Link
 	for _, file := range files {
-		var link Link
-		link.Name = file.Name()
-		finfo, err := file.Info()
-		if err != nil {
-			fmt.Println(err)
+		if !goIgnoreFiles.Contains(file.Name()) { // terrible but works
+			var link Link
+			link.Name = file.Name()
+			finfo, err := file.Info()
+			if err != nil {
+				fmt.Println(err)
+			}
+			link.Date = finfo.ModTime().Unix()
+			link.Href = getHref(file, upath)
+			link.Tick = getTick(upath, file.Name())
+			links = append(links, link)
 		}
-		link.Date = finfo.ModTime().Unix()
-		link.Href = getHref(file, upath)
-		link.Tick = getTick(upath, file.Name())
-		links = append(links, link)
 	}
 	if upath == "." {
 		sort.Slice(links, func(i, j int) bool {
@@ -266,7 +292,6 @@ func serveFile(w http.ResponseWriter, r *http.Request, name string) {
 }
 
 func main() {
-
 	mux := http.NewServeMux()
 	finalHandler := http.HandlerFunc(handlePath)
 	mux.Handle("/", http.StripPrefix("/", filterRequests(serveStatic(logRequests(finalHandler)))))
