@@ -11,13 +11,17 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/user"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"text/template"
 	"time"
 	"unicode/utf8"
+
+	"github.com/grafana/pyroscope-go"
 
 	bolt "go.etcd.io/bbolt"
 )
@@ -71,13 +75,17 @@ var embedded embed.FS
 var singleton *Bolton
 
 var (
-	goServPort    string
-	goServAddr    string
-	goServDir     string
-	goServTlsCrt  string
-	goServTlsKey  string
-	goServBoltDB  string
-	goIgnoreFiles arrayFlags
+	goServPort            string
+	goServAddr            string
+	goServDir             string
+	goServTlsCrt          string
+	goServTlsKey          string
+	goServBoltDB          string
+	goIgnoreFiles         arrayFlags
+	goServePyroscope      string
+	goServePyroscopeName  string
+	goServePyroscopePort  string
+	goServePyroscopeProto string
 )
 
 func init() {
@@ -89,6 +97,11 @@ func init() {
 	flag.StringVar(&goServTlsKey, "key", "tls.key", "keyfile")
 	flag.StringVar(&goServBoltDB, "db", "bolt.db", "db file")
 	flag.Var(&goIgnoreFiles, "ignore", "repeatable, -ignore fname1 -ignore fname2")
+	flag.StringVar(&goServePyroscope, "pyroscope", "", "Pyroscope pplication name")
+	flag.StringVar(&goServePyroscopeName, "pyroscope app name", "", "Pyroscope proto")
+	flag.StringVar(&goServePyroscopePort, "pyroscope port", "4040", "Pyroscope port")
+	flag.StringVar(&goServePyroscopeProto, "pyroscope proto", "http", "Pyroscope proto")
+
 	if !strings.HasSuffix(os.Args[0], ".test") {
 		flag.Parse()
 	} else {
@@ -156,6 +169,50 @@ func init() {
 			return errr
 		},
 	}
+}
+
+func initPyroscope(addr string, proto string, port string, name string) {
+	runtime.SetMutexProfileFraction(5)
+	runtime.SetBlockProfileRate(5)
+	_, err := pyroscope.Start(pyroscope.Config{
+		ApplicationName: name,
+		ServerAddress:   fmt.Sprintf("%s://%s:%s", proto, addr, port),
+		Logger:          nil, // pyroscope.StandardLogger,
+		ProfileTypes: []pyroscope.ProfileType{
+			pyroscope.ProfileCPU,
+			pyroscope.ProfileAllocObjects,
+			pyroscope.ProfileAllocSpace,
+			pyroscope.ProfileInuseObjects,
+			pyroscope.ProfileInuseSpace,
+			pyroscope.ProfileGoroutines,
+			pyroscope.ProfileMutexCount,
+			pyroscope.ProfileMutexDuration,
+			pyroscope.ProfileBlockCount,
+			pyroscope.ProfileBlockDuration,
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func getPyroscopeAppName() string {
+	if goServePyroscopeName != "" {
+		return goServePyroscopeName
+	}
+	var hostname, runuser string
+	var err error
+	hostname, err = os.Hostname()
+	if err != nil {
+		hostname = "undef"
+	}
+	user, err := user.Current()
+	if err != nil {
+		runuser = "anonymous"
+	} else {
+		runuser = user.Username
+	}
+	return fmt.Sprintf("goserv.%s.%s", hostname, runuser)
 }
 
 func GetBoltInstance() *Bolton {
@@ -292,10 +349,12 @@ func serveFile(w http.ResponseWriter, r *http.Request, name string) {
 }
 
 func main() {
+	if goServAddr != "" {
+		initPyroscope(goServePyroscope, goServePyroscopeProto, goServePyroscopePort, getPyroscopeAppName())
+	}
 	mux := http.NewServeMux()
 	finalHandler := http.HandlerFunc(handlePath)
 	mux.Handle("/", http.StripPrefix("/", filterRequests(serveStatic(logRequests(finalHandler)))))
-
 	srv := getTLSSrv(goServAddr, goServPort, TLSConfig, mux)
 	fmt.Printf("Listening on %s\n", goServPort)
 	log.Fatal(srv.ListenAndServeTLS(goServTlsCrt, goServTlsKey))
