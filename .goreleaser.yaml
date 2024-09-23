@@ -36,7 +36,7 @@ sboms:
     artifacts: source
 
 archives:
-  - format: gz
+  - format: zip
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -44,9 +44,6 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
 
 changelog:
   sort: asc
